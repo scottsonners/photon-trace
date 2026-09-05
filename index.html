@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0a0c14">
+  <title>PHOTON // Ray Trace Engine</title>
+  <style>
+    :root {
+      --bg: #07090e;
+      --panel: rgba(18, 22, 34, 0.85);
+      --border: rgba(64, 224, 208, 0.25);
+      --cyan: #00f0ff;
+      --amber: #ffb800;
+      --purple: #b537f2;
+      --green: #00ff88;
+      --text: #e2e8f0;
+      --text-dim: #718096;
+    }
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      touch-action: none;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+    }
+    header {
+      padding: env(safe-area-inset-top, 12px) 16px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(to bottom, rgba(7,9,14,0.95), transparent);
+      z-index: 10;
+    }
+    .hud-title {
+      font-weight: 800;
+      font-size: 1.1rem;
+      letter-spacing: 1px;
+      color: var(--cyan);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hud-title span {
+      font-size: 0.65rem;
+      background: rgba(0, 240, 255, 0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--cyan);
+    }
+    .stats {
+      font-size: 0.75rem;
+      display: flex;
+      gap: 12px;
+      color: var(--text-dim);
+    }
+    .stats b { color: var(--green); }
+    #canvas-container {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    /* Floating Concept Card */
+    #concept-card {
+      position: absolute;
+      top: 70px;
+      left: 16px;
+      right: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      z-index: 15;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    #concept-card h3 {
+      font-size: 0.85rem;
+      color: var(--amber);
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    #concept-card p {
+      font-size: 0.75rem;
+      line-height: 1.35;
+      color: #cbd5e1;
+    }
+    /* Bottom Controls Dock */
+    footer {
+      padding: 12px 16px calc(env(safe-area-inset-bottom, 12px) + 10px);
+      background: linear-gradient(to top, rgba(7,9,14,0.98) 80%, transparent);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+    }
+    .engine-bar {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: 4px;
+    }
+    .engine-bar::-webkit-scrollbar { display: none; }
+    .btn-upgrade {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 10px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 0.72rem;
+      font-weight: 600;
+      white-space: nowrap;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .btn-upgrade.active {
+      background: rgba(0, 240, 255, 0.15);
+      border-color: var(--cyan);
+      box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+      color: #fff;
+    }
+    .btn-upgrade.locked {
+      opacity: 0.4;
+      filter: grayscale(1);
+    }
+    .action-bar {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-action {
+      flex: 1;
+      background: linear-gradient(135deg, #00f0ff, #0077ff);
+      border: none;
+      color: #000;
+      font-weight: 700;
+      font-size: 0.85rem;
+      padding: 12px;
+      border-radius: 10px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      box-shadow: 0 4px 15px rgba(0, 240, 255, 0.4);
+    }
+    .btn-action:active { transform: scale(0.98); }
+    /* Touch Aim Guide Overlay */
+    .aim-hint {
+      position: absolute;
+      bottom: 120px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.75rem;
+      background: rgba(0,0,0,0.6);
+      padding: 6px 14px;
+      border-radius: 20px;
+      color: var(--cyan);
+      pointer-events: none;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="hud-title">PHOTON <span>RT-ENGINE</span></div>
+    <div class="stats">
+      <div>LVL: <b id="ui-level">1</b>/5</div>
+      <div>FLOPs: <b id="ui-energy">0</b></div>
+    </div>
+  </header>
+
+  <div id="concept-card">
+    <h3 id="card-title">PRIMARY CAMERA RAY</h3>
+    <p id="card-desc">Ray tracing begins by projecting a vector from the camera through a screen pixel into the scene to calculate object intersections.</p>
+  </div>
+
+  <div id="canvas-container">
+    <canvas id="stage"></canvas>
+    <div class="aim-hint" id="aim-hint">Touch & drag anywhere to aim rays</div>
+  </div>
+
+  <footer>
+    <div class="engine-bar" id="engine-dock">
+      </div>
+    <div class="action-bar">
+      <button class="btn-action" id="btn-next" style="display: none;">Level Clear // Overclock Next Tier &rarr;</button>
+    </div>
+  </footer>
+
+  <script>
+    // --- Engine Upgrades & Curriculum ---
+    const TIERS = [
+      {
+        id: 0,
+        name: "Primary Ray",
+        title: "Stage 1: Primary Ray Intersection",
+        desc: "In rendering, primary rays test for basic geometry intersection (t-distance). Drag to point the emitter directly at the sensor node.",
+        unlocked: true,
+        maxBounces: 0,
+        enableRefract: false,
+        enableGI: false,
+        samples: 1
+      },
+      {
+        id: 1,
+        name: "Shadow Ray",
+        title: "Stage 2: Shadow Rays & Occlusion",
+        desc: "When a surface is hit, a shadow ray is shot toward the light. If blocked by an occluder, direct illumination drops to zero.",
+        unlocked: false,
+        maxBounces: 0,
+        enableRefract: false,
+        enableGI: false,
+        samples: 1
+      },
+      {
+        id: 2,
+        name: "Specular",
+        title: "Stage 3: Law of Reflection",
+        desc: "Mirrors bounce rays at angle of incidence = angle of reflection (R = I - 2(I·N)N). Bounce around the occlusion shield to hit target!",
+        unlocked: false,
+        maxBounces: 2,
+        enableRefract: false,
+        enableGI: false,
+        samples: 1
+      },
+      {
+        id: 3,
+        name: "Snell's Law",
+        title: "Stage 4: Dielectric Refraction",
+        desc: "When entering denser media (glass, water), light bends according to Snell's Law (n₁ sin θ₁ = n₂ sin θ₂). Use the crystal prism to bend light.",
+        unlocked: false,
+        maxBounces: 3,
+        enableRefract: true,
+        enableGI: false,
+        samples: 1
+      },
+      {
+        id: 4,
+        name: "Path Tracing",
+        title: "Stage 5: Global Illumination (Monte Carlo)",
+        desc: "Real light bounces diffusely in all directions. Monte Carlo path tracing samples multiple randomized rays per pixel to illuminate all targets.",
+        unlocked: false,
+        maxBounces: 3,
+        enableRefract: true,
+        enableGI: true,
+        samples: 28
+      }
+    ];
+
+    let currentTier = 0;
+    let energy = 0;
+    let levelCleared = false;
+
+    // --- Canvas & Math Setup ---
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+
+    function resize() {
+      const dpr = window.devicePixelRatio || 1;
+      width = canvas.parentElement.clientWidth;
+      height = canvas.parentElement.clientHeight;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resize);
+    setTimeout(resize, 50);
+
+    // Vector operations
+    const vec2 = {
+      sub: (a, b) => ({ x: a.x - b.x, y: a.y - b.y }),
+      add: (a, b) => ({ x: a.x + b.x, y: a.y + b.y }),
+      dot: (a, b) => a.x * b.x + a.y * b.y,
+      len: (v) => Math.hypot(v.x, v.y),
+      norm: (v) => {
+        const l = Math.hypot(v.x, v.y) || 1;
+        return { x: v.x / l, y: v.y / l };
+      },
+      scale: (v, s) => ({ x: v.x * s, y: v.y * s }),
+      reflect: (I, N) => {
+        const d = 2 * (I.x * N.x + I.y * N.y);
+        return { x: I.x - d * N.x, y: I.y - d * N.y };
+      },
+      refract: (I, N, eta) => {
+        let cosi = Math.max(-1, Math.min(1, I.x * N.x + I.y * N.y));
+        let etai = 1, etat = eta;
+        let n = { ...N };
+        if (cosi < 0) { cosi = -cosi; } else { [etai, etat] = [etat, etai]; n.x = -n.x; n.y = -n.y; }
+        let etaRatio = etai / etat;
+        let k = 1 - etaRatio * etaRatio * (1 - cosi * cosi);
+        if (k < 0) return null; // Total internal reflection
+        return {
+          x: etaRatio * I.x + (etaRatio * cosi - Math.sqrt(k)) * n.x,
+          y: etaRatio * I.y + (etaRatio * cosi - Math.sqrt(k)) * n.y
+        };
+      }
+    };
+
+    // --- Game Entities ---
+    let emitter = { x: 50, y: 150, angle: 0 };
+    let targets = [];
+    let mirrors = [];
+    let prisms = [];
+    let occluders = [];
+
+    // --- Scene Setup per Tier ---
+    function setupLevel(lvl) {
+      currentTier = lvl;
+      levelCleared = false;
+      document.getElementById('btn-next').style.display = 'none';
+      document.getElementById('ui-level').innerText = lvl + 1;
+      document.getElementById('card-title').innerText = TIERS[lvl].title;
+      document.getElementById('card-desc').innerText = TIERS[lvl].desc;
+
+      mirrors = [];
+      prisms = [];
+      occluders = [];
+      targets = [];
+
+      const cx = width / 2;
+      const cy = height / 2;
+
+      emitter.x = 60;
+      emitter.y = cy;
+      emitter.angle = 0;
+
+      if (lvl === 0) {
+        // Direct target
+        targets.push({ x: width - 70, y: cy, radius: 24, hit: false });
+      } else if (lvl === 1) {
+        // Occlusion wall in middle
+        occluders.push({ a: { x: cx, y: cy - 90 }, b: { x: cx, y: cy + 90 } });
+        targets.push({ x: width - 70, y: cy + 120, radius: 24, hit: false });
+        emitter.y = cy - 120;
+      } else if (lvl === 2) {
+        // Must bounce off mirror
+        occluders.push({ a: { x: cx - 40, y: cy - 180 }, b: { x: cx - 40, y: cy + 180 } });
+        mirrors.push({ a: { x: cx, y: cy - 150 }, b: { x: cx + 100, y: cy - 150 } });
+        targets.push({ x: cx + 80, y: cy + 120, radius: 24, hit: false });
+        emitter.angle = -0.5;
+      } else if (lvl === 3) {
+        // Prisms bending light
+        prisms.push({ x: cx - 30, y: cy - 60, w: 60, h: 120, ior: 1.5 });
+        occluders.push({ a: { x: cx + 80, y: cy - 140 }, b: { x: cx + 80, y: cy } });
+        targets.push({ x: width - 60, y: cy + 80, radius: 24, hit: false });
+      } else if (lvl === 4) {
+        // Global Illumination multiple hidden sensors
+        targets.push({ x: width - 60, y: cy - 120, radius: 22, hit: false });
+        targets.push({ x: width - 60, y: cy + 120, radius: 22, hit: false });
+        targets.push({ x: cx, y: cy + 160, radius: 22, hit: false });
+        mirrors.push({ a: { x: cx - 30, y: cy - 100 }, b: { x: cx + 50, y: cy - 40 } });
+        occluders.push({ a: { x: cx, y: cy }, b: { x: cx + 80, y: cy } });
+      }
+
+      updateDockUI();
+    }
+
+    // --- Ray-Object Intersections ---
+    function lineIntersect(p, r, q, s) {
+      const rxs = r.x * s.y - r.y * s.x;
+      const qpx = q.x - p.x;
+      const qpy = q.y - p.y;
+      if (Math.abs(rxs) < 1e-6) return null;
+      const t = (qpx * s.y - qpy * s.x) / rxs;
+      const u = (qpx * r.y - qpy * r.x) / rxs;
+      if (t > 0.001 && u >= 0 && u <= 1) {
+        return { t, point: { x: p.x + t * r.x, y: p.y + t * r.y } };
+      }
+      return null;
+    }
+
+    function circleIntersect(p, d, c, radius) {
+      const oc = vec2.sub(p, c);
+      const b = vec2.dot(oc, d);
+      const cVal = vec2.dot(oc, oc) - radius * radius;
+      const disc = b * b - cVal;
+      if (disc > 0) {
+        const t = -b - Math.sqrt(disc);
+        if (t > 0.001) return { t, point: { x: p.x + t * d.x, y: p.y + t * d.y } };
+      }
+      return null;
+    }
+
+    // --- Trace Pipeline ---
+    function traceRay(origin, dir, bouncesRemaining, enableRefract) {
+      let closest = { t: 9999, hit: null, type: null, obj: null, normal: null };
+
+      // 1. Occluders (absorbing walls)
+      occluders.forEach(wall => {
+        const seg = vec2.sub(wall.b, wall.a);
+        const hit = lineIntersect(origin, dir, wall.a, seg);
+        if (hit && hit.t < closest.t) {
+          closest = { ...hit, type: 'occluder' };
+        }
+      });
+
+      // 2. Mirrors (specular)
+      mirrors.forEach(mirror => {
+        const seg = vec2.sub(mirror.b, mirror.a);
+        const hit = lineIntersect(origin, dir, mirror.a, seg);
+        if (hit && hit.t < closest.t) {
+          const norm = vec2.norm({ x: -seg.y, y: seg.x });
+          closest = { ...hit, type: 'mirror', normal: norm };
+        }
+      });
+
+      // 3. Targets (sensors)
+      targets.forEach(tgt => {
+        const hit = circleIntersect(origin, dir, tgt, tgt.radius);
+        if (hit && hit.t < closest.t) {
+          closest = { ...hit, type: 'target', obj: tgt };
+        }
+      });
+
+      // 4. Prisms (refraction)
+      if (enableRefract) {
+        prisms.forEach(prism => {
+          const edges = [
+            { a: { x: prism.x, y: prism.y }, b: { x: prism.x + prism.w, y: prism.y }, n: { x: 0, y: -1 } },
+            { a: { x: prism.x + prism.w, y: prism.y }, b: { x: prism.x + prism.w, y: prism.y + prism.h }, n: { x: 1, y: 0 } },
+            { a: { x: prism.x + prism.w, y: prism.y + prism.h }, b: { x: prism.x, y: prism.y + prism.h }, n: { x: 0, y: 1 } },
+            { a: { x: prism.x, y: prism.y + prism.h }, b: { x: prism.x, y: prism.y }, n: { x: -1, y: 0 } }
+          ];
+          edges.forEach(edge => {
+            const seg = vec2.sub(edge.b, edge.a);
+            const hit = lineIntersect(origin, dir, edge.a, seg);
+            if (hit && hit.t < closest.t) {
+              closest = { ...hit, type: 'prism', normal: edge.n, ior: prism.ior };
+            }
+          });
+        });
+      }
+
+      if (closest.t < 9999) {
+        if (closest.type === 'target') {
+          closest.obj.hit = true;
+        }
+
+        const path = [{ x: origin.x, y: origin.y }, closest.point];
+
+        if (bouncesRemaining > 0) {
+          if (closest.type === 'mirror') {
+            const rDir = vec2.reflect(dir, closest.normal);
+            const subPath = traceRay(closest.point, rDir, bouncesRemaining - 1, enableRefract);
+            return path.concat(subPath.slice(1));
+          } else if (closest.type === 'prism') {
+            const refrDir = vec2.refract(dir, closest.normal, closest.ior);
+            if (refrDir) {
+              const subPath = traceRay(closest.point, refrDir, bouncesRemaining - 1, enableRefract);
+              return path.concat(subPath.slice(1));
+            }
+          }
+        }
+        return path;
+      }
+
+      // Ray misses into space
+      return [{ x: origin.x, y: origin.y }, { x: origin.x + dir.x * 600, y: origin.y + dir.y * 600 }];
+    }
+
+    // --- Render Loop ---
+    function render() {
+      ctx.clearRect(0, 0, width, height);
+
+      // Reset hit checks
+      targets.forEach(t => t.hit = false);
+
+      const tier = TIERS[currentTier];
+
+      // Draw Occluders
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#2d3748';
+      ctx.lineCap = 'round';
+      occluders.forEach(wall => {
+        ctx.beginPath();
+        ctx.moveTo(wall.a.x, wall.a.y);
+        ctx.lineTo(wall.b.x, wall.b.y);
+        ctx.stroke();
+      });
+
+      // Draw Mirrors
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#00f0ff';
+      mirrors.forEach(mirror => {
+        ctx.beginPath();
+        ctx.moveTo(mirror.a.x, mirror.a.y);
+        ctx.lineTo(mirror.b.x, mirror.b.y);
+        ctx.stroke();
+      });
+
+      // Draw Refractive Prisms
+      prisms.forEach(prism => {
+        ctx.fillStyle = 'rgba(181, 55, 242, 0.2)';
+        ctx.strokeStyle = '#b537f2';
+        ctx.lineWidth = 2;
+        ctx.fillRect(prism.x, prism.y, prism.w, prism.h);
+        ctx.strokeRect(prism.x, prism.y, prism.w, prism.h);
+      });
+
+      // Draw Sensors/Targets
+      targets.forEach(tgt => {
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, tgt.radius, 0, Math.PI * 2);
+        ctx.fillStyle = tgt.hit ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 184, 0, 0.15)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = tgt.hit ? '#00ff88' : '#ffb800';
+        ctx.stroke();
+
+        // Inner Core
+        ctx.beginPath();
+        ctx.arc(tgt.x, tgt.y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = tgt.hit ? '#00ff88' : '#ffb800';
+        ctx.fill();
+      });
+
+      // --- TRACE PHOTON RAYS ---
+      const numSamples = tier.samples;
+      const baseDir = { x: Math.cos(emitter.angle), y: Math.sin(emitter.angle) };
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+
+      for (let s = 0; s < numSamples; s++) {
+        let dir = { ...baseDir };
+        if (tier.enableGI && numSamples > 1) {
+          // Monte Carlo jitter spread
+          const angleJitter = emitter.angle + (Math.random() - 0.5) * 0.95;
+          dir = { x: Math.cos(angleJitter), y: Math.sin(angleJitter) };
+        }
+
+        const rayPath = traceRay(emitter, dir, tier.maxBounces, tier.enableRefract);
+
+        ctx.strokeStyle = tier.enableGI ? 'rgba(255, 184, 0, 0.18)' : 'rgba(0, 240, 255, 0.85)';
+        ctx.lineWidth = tier.enableGI ? 2 : 3;
+
+        ctx.beginPath();
+        ctx.moveTo(rayPath[0].x, rayPath[0].y);
+        for (let i = 1; i < rayPath.length; i++) {
+          ctx.lineTo(rayPath[i].x, rayPath[i].y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Draw Emitter
+      ctx.beginPath();
+      ctx.arc(emitter.x, emitter.y, 14, 0, Math.PI * 2);
+      ctx.fillStyle = '#00f0ff';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(emitter.x, emitter.y);
+      ctx.lineTo(emitter.x + Math.cos(emitter.angle) * 26, emitter.y + Math.sin(emitter.angle) * 26);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      // Check Clear condition
+      const allTargetsHit = targets.length > 0 && targets.every(t => t.hit);
+      if (allTargetsHit && !levelCleared) {
+        levelCleared = true;
+        energy += 128;
+        document.getElementById('ui-energy').innerText = energy;
+        if (currentTier < TIERS.length - 1) {
+          TIERS[currentTier + 1].unlocked = true;
+          document.getElementById('btn-next').style.display = 'block';
+        }
+        updateDockUI();
+      }
+
+      requestAnimationFrame(render);
+    }
+
+    // --- Touch Interaction ---
+    function handleTouch(e) {
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const tx = touch.clientX - rect.left;
+      const ty = touch.clientY - rect.top;
+
+      emitter.angle = Math.atan2(ty - emitter.y, tx - emitter.x);
+      document.getElementById('aim-hint').style.display = 'none';
+      e.preventDefault();
+    }
+
+    canvas.addEventListener('touchstart', handleTouch, { passive: false });
+    canvas.addEventListener('touchmove', handleTouch, { passive: false });
+
+    // --- UI & Controls ---
+    function updateDockUI() {
+      const dock = document.getElementById('engine-dock');
+      dock.innerHTML = '';
+      TIERS.forEach((t, i) => {
+        const btn = document.createElement('button');
+        btn.className = `btn-upgrade ${t.unlocked ? '' : 'locked'} ${currentTier === i ? 'active' : ''}`;
+        btn.innerHTML = `<span>T${i+1}</span>${t.name}`;
+        if (t.unlocked) {
+          btn.onclick = () => setupLevel(i);
+        }
+        dock.appendChild(btn);
+      });
+    }
+
+    document.getElementById('btn-next').onclick = () => {
+      if (currentTier < TIERS.length - 1) {
+        setupLevel(currentTier + 1);
+      }
+    };
+
+    // Initialize
+    setTimeout(() => {
+      setupLevel(0);
+      render();
+    }, 100);
+  </script>
+</body>
+</html>
